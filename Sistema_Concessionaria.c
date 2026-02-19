@@ -2,10 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Estrutura para representar uma venda
-typedef struct Venda
-{
-    int nota_fiscal;
+typedef struct Venda {
+    char nota_fiscal[50];
     float valor;
     char marca[50];
     int ano;
@@ -14,9 +12,7 @@ typedef struct Venda
     struct Venda *ant;
 } Venda;
 
-// Estrutura para representar um vendedor
-typedef struct Vendedor
-{
+typedef struct Vendedor {
     char nome[100];
     char cpf[12];
     int matricula;
@@ -26,300 +22,282 @@ typedef struct Vendedor
     struct Vendedor *prox;
 } Vendedor;
 
-// Nó cabeça da lista circular de vendedores
-typedef struct
-{
+typedef struct {
     Vendedor *fim;
     int qtd_vendedores;
 } ListaConcessionaria;
 
+// Fila - Processo de espera para clientes
+typedef struct Cliente {
+    char nome[100];
+    struct Cliente *prox;
+} Cliente;
 
-// Inicializa a lista de vendas de um vendedor
-void inicializa_vendas(Vendedor *v)
-{
-    v->inicio_vendas = NULL;
-    v->fim_vendas = NULL;
-    v->qtd_vendas = 0;
+typedef struct {
+    Cliente *frente;
+    Cliente *tras;
+} FilaAtendimento;
+
+// Pilha - Histórico de Ações
+typedef struct Log {
+    char acao[100];
+    struct Log *prox;
+} Log;
+
+typedef struct {
+    Log *topo;
+} PilhaHistorico;
+
+// --- Inicializações ---
+
+void inicializa_concessionaria(ListaConcessionaria *l) { 
+    l->fim = NULL; 
+    l->qtd_vendedores = 0; 
 }
 
-// Inicializa a concessionária
-void inicializa_concessionaria(ListaConcessionaria *concessionaria)
-{
-    concessionaria->fim = NULL;
-    concessionaria->qtd_vendedores = 0;
+void inicializa_fila(FilaAtendimento *f) { 
+    f->frente = f->tras = NULL; 
 }
 
-// Função para criar um novo vendedor
-Vendedor *criar_vendedor(char nome[], char cpf[], int matricula)
-{
-    Vendedor *novo = (Vendedor *)malloc(sizeof(Vendedor));
-    if (novo == NULL)
-        return NULL;
-
-    strcpy(novo->nome, nome);
-    strcpy(novo->cpf, cpf);
-    novo->matricula = matricula;
-    inicializa_vendas(novo);
-    novo->prox = novo;
-    return novo;
+void inicializa_pilha(PilhaHistorico *p) { 
+    p->topo = NULL; 
 }
 
-// Insere um vendedor na lista circular
-void inserir_vendedor(ListaConcessionaria *concessionaria)
-{
+// --- Funções Auxiliares (Pilha e Fila) ---
+
+void empilhar_log(PilhaHistorico *p, char mensagem[]) {
+    Log *novo = (Log*)malloc(sizeof(Log));
+    if(novo) {
+        strcpy(novo->acao, mensagem);
+        novo->prox = p->topo;
+        p->topo = novo;
+    }
+}
+
+void enfileirar_cliente(FilaAtendimento *f, char nome[]) {
+    Cliente *novo = (Cliente*)malloc(sizeof(Cliente));
+    if(novo) {
+        strcpy(novo->nome, nome);
+        novo->prox = NULL;
+        if (f->tras == NULL) f->frente = novo;
+        else f->tras->prox = novo;
+        f->tras = novo;
+        printf("Cliente %s entrou na fila.\n", nome);
+    }
+}
+
+void chamar_proximo(FilaAtendimento *f) {
+    if (f->frente == NULL) {
+        printf("Todos os clientes foram atendidos!\n");
+        return;
+    }
+    Cliente *temp = f->frente;
+    printf("Atendendo cliente: %s\n", temp->nome);
+    f->frente = f->frente->prox;
+    if (f->frente == NULL) f->tras = NULL;
+    free(temp);
+}
+
+// --- Funcionalidades do Sistema ---
+
+void cadastrar_vendedor(ListaConcessionaria *c, PilhaHistorico *p) {
     char nome[100], cpf[12];
-    int matricula;
-
+    int mat;
     printf("\n--- Cadastro de Vendedor ---\n");
-    printf("Nome: ");
-    fgets(nome, sizeof(nome), stdin);
-    nome[strcspn(nome, "\n")] = '\0';
+    printf("Nome: "); scanf(" %[^\n]", nome);
+    printf("CPF: "); scanf("%s", cpf);
+    printf("Matrícula: "); scanf("%d", &mat);
 
-    printf("CPF (apenas números): ");
-    fgets(cpf, sizeof(cpf), stdin);
-    cpf[strcspn(cpf, "\n")] = '\0';
-
-    printf("Matrícula: ");
-    scanf("%d", &matricula);
-    // Verificar se matrícula já existe
-    if (concessionaria->fim != NULL)
-    {
-        Vendedor *atual = concessionaria->fim->prox;
-        do
-        {
-            if (atual->matricula == matricula)
-            {
+    // Verifica duplicidade de matrícula
+    if (c->fim != NULL) {
+        Vendedor *atual = c->fim->prox;
+        do {
+            if (atual->matricula == mat) {
                 printf("Erro: Matrícula já existente!\n");
                 return;
             }
             atual = atual->prox;
-        } while (atual != concessionaria->fim->prox);
+        } while (atual != c->fim->prox);
     }
 
-    Vendedor *novo = criar_vendedor(nome, cpf, matricula);
-    if (novo == NULL)
-    {
-        printf("Erro ao alocar memória!\n");
-        return;
-    }
+    Vendedor *novo = (Vendedor*)malloc(sizeof(Vendedor));
+    strcpy(novo->nome, nome);
+    strcpy(novo->cpf, cpf);
+    novo->matricula = mat;
+    novo->inicio_vendas = novo->fim_vendas = NULL;
+    novo->qtd_vendas = 0;
 
-    if (concessionaria->fim == NULL)
-    {
-        concessionaria->fim = novo;
+    if (c->fim == NULL) {
+        novo->prox = novo;
+        c->fim = novo;
+    } else {
+        novo->prox = c->fim->prox;
+        c->fim->prox = novo;
+        c->fim = novo;
     }
-    else
-    {
-        novo->prox = concessionaria->fim->prox;
-        concessionaria->fim->prox = novo;
-        concessionaria->fim = novo;
-    }
-    concessionaria->qtd_vendedores++;
+    c->qtd_vendedores++;
+    empilhar_log(p, "Novo vendedor cadastrado");
     printf("Vendedor cadastrado com sucesso!\n");
 }
 
-// Remove um vendedor da lista circular
-void remover_vendedor(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
+void remover_vendedor(ListaConcessionaria *c, PilhaHistorico *p) {
+    if (c->fim == NULL) {
         printf("Nenhum vendedor cadastrado.\n");
         return;
     }
 
-    int matricula;
+    int mat;
     printf("\n--- Remover Vendedor ---\n");
-    printf("Matrícula do vendedor a ser removido: ");
-    scanf("%d", &matricula);
+    printf("Matrícula do vendedor a ser removido: "); scanf("%d", &mat);
 
-    Vendedor *atual = concessionaria->fim->prox, *anterior = concessionaria->fim;
+    Vendedor *atual = c->fim->prox;
+    Vendedor *anterior = c->fim;
+    int achou = 0;
 
-    // Encontrar o vendedor
-    do
-    {
-        if (atual->matricula == matricula)
+    do {
+        if (atual->matricula == mat) {
+            achou = 1;
             break;
+        }
         anterior = atual;
         atual = atual->prox;
-    } while (atual != concessionaria->fim->prox);
+    } while (atual != c->fim->prox);
 
-    if (atual->matricula != matricula)
-    {
+    if (!achou) {
         printf("Vendedor não encontrado.\n");
         return;
     }
 
-    // Liberar vendas
+    // Liberar vendas (lista duplamente ligada)
     Venda *v = atual->inicio_vendas;
-    while (v != NULL)
-    {
+    while (v != NULL) {
         Venda *temp = v;
         v = v->prox;
         free(temp);
     }
 
-    // Atualizar lista
-    if (concessionaria->qtd_vendedores == 1)
-    {
-        concessionaria->fim = NULL;
-    }
-    else
-    {
+    // Atualizar lista circular
+    if (c->qtd_vendedores == 1) {
+        c->fim = NULL;
+    } else {
         anterior->prox = atual->prox;
-        if (atual == concessionaria->fim)
-        {
-            concessionaria->fim = anterior;
+        if (atual == c->fim) {
+            c->fim = anterior;
         }
     }
 
     free(atual);
-    concessionaria->qtd_vendedores--;
+    c->qtd_vendedores--;
+    empilhar_log(p, "Vendedor removido");
     printf("Vendedor removido com sucesso.\n");
 }
 
-// Cadastra uma nova venda para um vendedor
-void cadastrar_venda(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
+void listar_vendedores(ListaConcessionaria *c) {
+    if (c->fim == NULL) {
         printf("Nenhum vendedor cadastrado.\n");
         return;
     }
 
-    int matricula, nota_fiscal, ano;
-    float valor;
-    char marca[50], modelo[50];
-
-    printf("\n--- Cadastro de Venda ---\n");
-    printf("Matrícula do vendedor: ");
-    scanf("%d", &matricula);
-
-    Vendedor *v = concessionaria->fim->prox;
-    do
-    {
-        if (v->matricula == matricula)
-            break;
-        v = v->prox;
-    } while (v != concessionaria->fim->prox);
-
-    if (v->matricula != matricula)
-    {
-        printf("Vendedor não encontrado.\n");
-        return;
-    }
-
-    printf("Número da nota fiscal: ");
-    scanf("%d", &nota_fiscal);
-
-    printf("Valor da venda: ");
-    scanf("%f", &valor);
-
-    printf("Marca do veículo: ");
-    fgets(marca, sizeof(marca), stdin);
-    marca[strcspn(marca, "\n")] = '\0';
-
-    printf("Ano do veículo: ");
-    scanf("%d", &ano);
-
-    printf("Modelo do veículo: ");
-    fgets(modelo, sizeof(modelo), stdin);
-    modelo[strcspn(modelo, "\n")] = '\0';
-
-    Venda *nova = (Venda *)malloc(sizeof(Venda));
-    if (nova == NULL)
-    {
-        printf("Erro ao alocar memória!\n");
-        return;
-    }
-
-    nova->nota_fiscal = nota_fiscal;
-    nova->valor = valor;
-    strcpy(nova->marca, marca);
-    nova->ano = ano;
-    strcpy(nova->modelo, modelo);
-    if (v->inicio_vendas == NULL)
-    {
-        nova->prox = NULL;
-        nova->ant = NULL;
-        v->inicio_vendas = nova;
-    }
-    else
-    {
-        nova->prox = NULL;
-        nova->ant = v->fim_vendas;
-        v->fim_vendas->prox = nova;
-        v->fim_vendas = nova;
-    }
-    v->qtd_vendas++;
-
-    printf("Venda registrada com sucesso para %s.\n", v->nome);
+    printf("\n--- Lista de Vendedores ---\n");
+    Vendedor *atual = c->fim->prox;
+    do {
+        printf("Nome: %s | CPF: %s | Matrícula: %d | Vendas: %d\n", 
+               atual->nome, atual->cpf, atual->matricula, atual->qtd_vendas);
+        atual = atual->prox;
+    } while (atual != c->fim->prox);
 }
 
-// Exibe o total de vendas de cada vendedor
-void exibir_total_vendas_por_vendedor(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
+void registrar_venda(ListaConcessionaria *c, PilhaHistorico *p) {
+    if (!c->fim) {
+        printf("Nenhum vendedor cadastrado para registrar venda.\n");
+        return;
+    }
+    
+    int mat;
+    printf("\n--- Registro de Venda ---\n");
+    printf("Matrícula do vendedor: "); 
+    scanf("%d", &mat);
+    scanf("%*c");
+    
+    Vendedor *v = c->fim->prox;
+    int achou = 0;
+    do {
+        if (v->matricula == mat) { achou = 1; break; }
+        v = v->prox;
+    } while (v != c->fim->prox);
+
+    if (achou) {
+        Venda *nova = (Venda*)malloc(sizeof(Venda));
+        printf("Nota Fiscal: "); scanf("%[^\n]", nova->nota_fiscal);
+        printf("Valor: "); scanf("%f", &nova->valor);
+        scanf("%*c");
+        printf("Marca: "); scanf(" %[^\n]", nova->marca);
+        printf("Modelo: "); scanf(" %[^\n]", nova->modelo);
+        printf("Ano: "); scanf("%d", &nova->ano);
+        
+        nova->prox = NULL;
+        nova->ant = v->fim_vendas;
+
+        if (v->inicio_vendas == NULL) v->inicio_vendas = nova;
+        else v->fim_vendas->prox = nova;
+        
+        v->fim_vendas = nova;
+        v->qtd_vendas++;
+        empilhar_log(p, "Venda realizada com sucesso");
+        printf("Venda registrada com sucesso para o vendedor %s.\n", v->nome);
+    } else {
+        printf("Vendedor não encontrado.\n");
+    }
+}
+
+void exibir_total_vendas_por_vendedor(ListaConcessionaria *c) {
+    if (c->fim == NULL) {
         printf("Nenhum vendedor cadastrado.\n");
         return;
     }
 
     printf("\n--- Total de Vendas por Vendedor ---\n");
-
-    Vendedor *atual = concessionaria->fim->prox;
-    do
-    {
+    Vendedor *atual = c->fim->prox;
+    do {
         float total = 0.0;
         Venda *v = atual->inicio_vendas;
-
-        while (v != NULL)
-        {
+        while (v != NULL) {
             total += v->valor;
             v = v->prox;
         }
-
         printf("Vendedor: %s (Matrícula: %d)\n", atual->nome, atual->matricula);
-        printf("Quantidade de vendas: %d\n", atual->qtd_vendas);
-        printf("Total vendido: R$ %.2f\n\n", total);
-
+        printf("Quantidade: %d | Total arrecadado: R$ %.2f\n\n", atual->qtd_vendas, total);
         atual = atual->prox;
-    } while (atual != concessionaria->fim->prox);
+    } while (atual != c->fim->prox);
 }
 
-// Exibe o valor total de todas as vendas da concessionária
-void exibir_total_vendas_concessionaria(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
+void exibir_total_vendas_concessionaria(ListaConcessionaria *c) {
+    if (c->fim == NULL) {
         printf("Nenhum vendedor cadastrado.\n");
         return;
     }
 
-    float total = 0.0;
+    float total_geral = 0.0;
     int qtd_total = 0;
 
-    Vendedor *atual = concessionaria->fim->prox;
-    do
-    {
+    Vendedor *atual = c->fim->prox;
+    do {
         Venda *v = atual->inicio_vendas;
-        while (v != NULL)
-        {
-            total += v->valor;
+        while (v != NULL) {
+            total_geral += v->valor;
             qtd_total++;
             v = v->prox;
         }
         atual = atual->prox;
-    } while (atual != concessionaria->fim->prox);
+    } while (atual != c->fim->prox);
 
-    printf("\n--- Total de Vendas da Concessionária ---\n");
-    printf("Quantidade total de vendas: %d\n", qtd_total);
-    printf("Valor total vendido: R$ %.2f\n", total);
+    printf("\n--- Desempenho Global da Concessionária ---\n");
+    printf("Total de veículos vendidos: %d\n", qtd_total);
+    printf("Faturamento total: R$ %.2f\n", total_geral);
 }
 
-// Exibe o vendedor que deu mais lucro à concessionária
-void exibir_vendedor_mais_lucrativo(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
+void exibir_vendedor_mais_lucrativo(ListaConcessionaria *c) {
+    if (c->fim == NULL) {
         printf("Nenhum vendedor cadastrado.\n");
         return;
     }
@@ -327,201 +305,174 @@ void exibir_vendedor_mais_lucrativo(ListaConcessionaria *concessionaria)
     Vendedor *mais_lucrativo = NULL;
     float maior_total = -1.0;
 
-    Vendedor *atual = concessionaria->fim->prox;
-    do
-    {
+    Vendedor *atual = c->fim->prox;
+    do {
         float total = 0.0;
         Venda *v = atual->inicio_vendas;
-
-        while (v != NULL)
-        {
+        while (v != NULL) {
             total += v->valor;
             v = v->prox;
         }
 
-        if (total > maior_total)
-        {
+        if (total > maior_total) {
             maior_total = total;
             mais_lucrativo = atual;
         }
-
         atual = atual->prox;
-    } while (atual != concessionaria->fim->prox);
+    } while (atual != c->fim->prox);
 
-    printf("\n--- Vendedor Mais Lucrativo ---\n");
-    printf("Nome: %s\n", mais_lucrativo->nome);
-    printf("CPF: %s\n", mais_lucrativo->cpf);
-    printf("Matrícula: %d\n", mais_lucrativo->matricula);
-    printf("Quantidade de vendas: %d\n", mais_lucrativo->qtd_vendas);
-    printf("Total vendido: R$ %.2f\n", maior_total);
+    if(mais_lucrativo) {
+        printf("\n--- Vendedor Destaque (Mais Lucrativo) ---\n");
+        printf("Nome: %s | Matrícula: %d\n", mais_lucrativo->nome, mais_lucrativo->matricula);
+        printf("Faturamento Gerado: R$ %.2f\n", maior_total);
+    }
 }
 
-// Exibe todas as vendas de veículo de marca específica
-void exibir_vendas_por_marca(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
+void exibir_vendas_por_marca(ListaConcessionaria *c) {
+    if (c->fim == NULL) {
         printf("Nenhum vendedor cadastrado.\n");
         return;
     }
 
-    char marca[50];
-    printf("\n--- Vendas por Marca ---\n");
-    printf("Digite a marca desejada: ");
-    fgets(marca, sizeof(marca), stdin);
-    marca[strcspn(marca, "\n")] = '\0';
+    char marca_busca[50];
+    
+    printf("\n--- Pesquisar Vendas por Marca ---\n");
+    printf("Digite a marca desejada: "); scanf(" %[^\n]", marca_busca);
 
     int encontrou = 0;
-
-    Vendedor *atual = concessionaria->fim->prox;
-    do
-    {
+    Vendedor *atual = c->fim->prox;
+    do {
         Venda *v = atual->inicio_vendas;
-        while (v != NULL)
-        {
-            if (strcasecmp(v->marca, marca) == 0)
-            {
-                printf("\nVendedor: %s (Matrícula: %d)\n", atual->nome, atual->matricula);
-                printf("Nota Fiscal: %d\n", v->nota_fiscal);
-                printf("Valor: R$ %.2f\n", v->valor);
-                printf("Modelo: %s %d\n", v->modelo, v->ano);
+        while (v != NULL) {
+            if (strcasecmp(v->marca, marca_busca) == 0) {
+                printf("\nVend. %s (Matrícula: %d)\n", atual->nome, atual->matricula);
+                printf("  -> NF: %s | Modelo: %s (%d) | Valor: R$ %.2f\n", 
+                       v->nota_fiscal, v->modelo, v->ano, v->valor);
                 encontrou = 1;
             }
             v = v->prox;
         }
         atual = atual->prox;
-    } while (atual != concessionaria->fim->prox);
+    } while (atual != c->fim->prox);
 
-    if (!encontrou)
-    {
-        printf("Nenhuma venda encontrada para a marca %s.\n", marca);
+    if (!encontrou) {
+        printf("Nenhum veículo da marca '%s' foi vendido.\n", marca_busca);
     }
 }
 
-// Função para exibir todos os vendedores
-void listar_vendedores(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-    {
-        printf("Nenhum vendedor cadastrado.\n");
-        return;
+// ARRAY: Uso de Array Estático para Metas
+void relatorio_metas() {
+    float metas[4] = {100000.0, 150000.0, 200000.0, 250000.0}; 
+    printf("\n--- Metas Trimestrais ---\n");
+    for(int i=0; i<4; i++) 
+        printf("Trimestre %d: R$ %.2f\n", i+1, metas[i]);
+}
+
+void exibir_historico(PilhaHistorico *p) {
+    Log *atual = p->topo;
+    printf("\n--- Histórico de Ações ---\n");
+    if(!atual) printf("Nenhuma ação registrada.\n");
+    while(atual) {
+        printf(" -> [%s]\n", atual->acao);
+        atual = atual->prox;
     }
-
-    printf("\n--- Lista de Vendedores ---\n");
-
-    Vendedor *atual = concessionaria->fim->prox;
-    do
-    {
-        printf("\nNome: %s\n", atual->nome);
-        printf("CPF: %s\n", atual->cpf);
-        printf("Matrícula: %d\n", atual->matricula);
-        printf("Quantidade de vendas: %d\n", atual->qtd_vendas);
-
-        atual = atual->prox;
-    } while (atual != concessionaria->fim->prox);
 }
 
-// Função para exibir o menu
-void exibir_menu()
-{
-    printf("\n=== Sistema de Gerenciamento da Concessionária ===\n");
-    printf("1. Cadastrar vendedor\n");
-    printf("2. Remover vendedor\n");
-    printf("3. Listar vendedores\n");
-    printf("4. Cadastrar venda\n");
-    printf("5. Total de vendas por vendedor\n");
-    printf("6. Total de vendas da concessionária\n");
-    printf("7. Vendedor mais lucrativo\n");
-    printf("8. Vendas por marca\n");
-    printf("9. Sair\n");
-    printf("Escolha uma opção: ");
-}
+// Limpeza de memória abrangente (Evita Memory Leaks)
+void limpar_tudo(ListaConcessionaria *c, FilaAtendimento *f, PilhaHistorico *p) {
+    printf("\nLimpando memória...\n");
 
-// Função para destruir todas as listas
-void destroi_lista(ListaConcessionaria *concessionaria)
-{
-    if (concessionaria->fim == NULL)
-        return;
-
-    Vendedor *atual = concessionaria->fim->prox;
-    while (atual != concessionaria->fim)
-    {
-        Vendedor *temp = atual;
-        atual = atual->prox;
-
-        // Liberar vendas
-        Venda *v = temp->inicio_vendas;
-        while (v != NULL)
-        {
+    // 1. Limpar Lista de Vendedores e Vendas
+    if (c->fim != NULL) {
+        Vendedor *atual = c->fim->prox;
+        while (atual != c->fim) {
+            Vendedor *temp = atual;
+            atual = atual->prox;
+            
+            // Limpa as vendas do vendedor temp
+            Venda *v = temp->inicio_vendas;
+            while (v != NULL) {
+                Venda *temp_v = v;
+                v = v->prox;
+                free(temp_v);
+            }
+            free(temp);
+        }
+        // Limpa as vendas do último vendedor e o próprio
+        Venda *v = c->fim->inicio_vendas;
+        while (v != NULL) {
             Venda *temp_v = v;
             v = v->prox;
             free(temp_v);
         }
-
-        free(temp);
+        free(c->fim);
+        c->fim = NULL;
     }
 
-    // Liberar último vendedor
-    if (concessionaria->fim != NULL)
-    {
-        Venda *v = concessionaria->fim->inicio_vendas;
-        while (v != NULL)
-        {
-            Venda *temp_v = v;
-            v = v->prox;
-            free(temp_v);
-        }
-        free(concessionaria->fim);
+    // 2. Limpar Fila de Clientes
+    while (f->frente != NULL) {
+        Cliente *temp_c = f->frente;
+        f->frente = f->frente->prox;
+        free(temp_c);
     }
 
-    concessionaria->fim = NULL;
-    concessionaria->qtd_vendedores = 0;
+    // 3. Limpar Pilha de Histórico
+    while (p->topo != NULL) {
+        Log *temp_l = p->topo;
+        p->topo = p->topo->prox;
+        free(temp_l);
+    }
+
+    printf("Memória totalmente liberada. Encerrando o sistema.\n");
 }
 
-int main()
-{
-    ListaConcessionaria concessionaria;
-    inicializa_concessionaria(&concessionaria);
-    int opcao;
+int main() {
+    ListaConcessionaria conc;
+    FilaAtendimento fila;
+    PilhaHistorico pilha;
+    
+    inicializa_concessionaria(&conc);
+    inicializa_fila(&fila);
+    inicializa_pilha(&pilha);
 
-    do
-    {
-        exibir_menu();
-        scanf("%d", &opcao);
-        switch (opcao)
-        {
-        case 1:
-            inserir_vendedor(&concessionaria);
-            break;
-        case 2:
-            remover_vendedor(&concessionaria);
-            break;
-        case 3:
-            listar_vendedores(&concessionaria);
-            break;
-        case 4:
-            cadastrar_venda(&concessionaria);
-            break;
-        case 5:
-            exibir_total_vendas_por_vendedor(&concessionaria);
-            break;
-        case 6:
-            exibir_total_vendas_concessionaria(&concessionaria);
-            break;
-        case 7:
-            exibir_vendedor_mais_lucrativo(&concessionaria);
-            break;
-        case 8:
-            exibir_vendas_por_marca(&concessionaria);
-            break;
-        case 9:
-            printf("Encerrando o sistema...\n");
-            break;
-        default:
-            printf("Opção inválida!\n");
+    int opt;
+    char aux_nome[100];
+
+    do {
+        printf("\n=== Sistema de Gerenciamento da Concessionária ===\n");
+        printf(" 1. Cadastrar Vendedor       |  8. Vendas por Marca\n");
+        printf(" 2. Remover Vendedor         |  9. Ordem de chegada\n");
+        printf(" 3. Listar Vendedores        | 10. Atender Cliente\n");
+        printf(" 4. Registrar Venda          | 11. Exibir Histórico\n");
+        printf(" 5. Total Vendas (Por Vend.) | 12. Metas\n");
+        printf(" 6. Total Vendas (Conces.)   |  0. Sair\n");
+        printf(" 7. Vendedor Mais Lucrativo  | \n");
+        printf("Escolha uma opção: "); 
+        scanf("%d", &opt);
+
+        switch(opt) {
+            case 1: cadastrar_vendedor(&conc, &pilha); break;
+            case 2: remover_vendedor(&conc, &pilha); break;
+            case 3: listar_vendedores(&conc); break;
+            case 4: registrar_venda(&conc, &pilha); break;
+            case 5: exibir_total_vendas_por_vendedor(&conc); break;
+            case 6: exibir_total_vendas_concessionaria(&conc); break;
+            case 7: exibir_vendedor_mais_lucrativo(&conc); break;
+            case 8: exibir_vendas_por_marca(&conc); break;
+            case 9: 
+                printf("Nome Cliente: "); scanf(" %[^\n]", aux_nome); 
+                enfileirar_cliente(&fila, aux_nome); 
+                break;
+            case 10: chamar_proximo(&fila); break;
+            case 11: exibir_historico(&pilha); break;
+            case 12: relatorio_metas(); break;
+            case 0: break;
+            default: printf("Opção inválida!\n");
         }
-    } while (opcao != 9);
+    } while(opt != 0);
 
-    destroi_lista(&concessionaria);
+    limpar_tudo(&conc, &fila, &pilha);
     return 0;
 }
+
+
